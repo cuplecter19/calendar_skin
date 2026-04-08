@@ -49,7 +49,7 @@ function cal_is_private_ip_address($ip) {
         $lower = strtolower($ip);
         if ($lower === '::1') return true;
         if (cal_starts_with($lower, 'fc') || cal_starts_with($lower, 'fd')) return true;
-        if (cal_starts_with($lower, 'fe8') || cal_starts_with($lower, 'fe9') || cal_starts_with($lower, 'fea') || cal_starts_with($lower, 'feb')) return true;
+        if (cal_starts_with($lower, 'fe8') || cal_starts_with($lower, 'fe9') || cal_starts_with($lower, 'fea') || cal_starts_with($lower, 'feb') || cal_starts_with($lower, 'fec') || cal_starts_with($lower, 'fed') || cal_starts_with($lower, 'fee') || cal_starts_with($lower, 'fef')) return true;
     }
     return false;
 }
@@ -136,23 +136,40 @@ function cal_make_random_token() {
 function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
     $error = '';
     $body = false;
+    $original_host = parse_url($url, PHP_URL_HOST);
+    $original_host = is_string($original_host) ? strtolower($original_host) : '';
 
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $body = '';
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_USERAGENT, 'calendar-header-fetcher');
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_WRITEFUNCTION, function($ch, $chunk) use (&$body, $max_bytes) {
+            $body .= $chunk;
+            if (strlen($body) > $max_bytes) return 0;
+            return strlen($chunk);
+        });
         if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
             curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
         }
-        $body = curl_exec($ch);
-        if ($body === false) $error = 'image download failed';
+        $result = curl_exec($ch);
         $status = intval(curl_getinfo($ch, CURLINFO_HTTP_CODE));
         $effective_url = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
+        $curl_errno = curl_errno($ch);
         curl_close($ch);
+        if ($result === false || $curl_errno === CURLE_WRITE_ERROR) {
+            if (strlen($body) > $max_bytes) {
+                $error = 'max 5MB';
+            } else {
+                $error = 'image download failed';
+            }
+            $body = false;
+        }
         if ($body !== false && ($status < 200 || $status >= 300)) {
             $error = 'image download failed';
             $body = false;
@@ -162,6 +179,13 @@ function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
             if (!cal_validate_remote_image_url($effective_url, $effective_error)) {
                 $error = 'blocked host';
                 $body = false;
+            } else {
+                $effective_host = parse_url($effective_url, PHP_URL_HOST);
+                $effective_host = is_string($effective_host) ? strtolower($effective_host) : '';
+                if ($original_host !== '' && $effective_host !== '' && $effective_host !== $original_host) {
+                    $error = 'blocked host';
+                    $body = false;
+                }
             }
         }
     } else {
@@ -169,10 +193,19 @@ function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
             'http' => array(
                 'method'  => 'GET',
                 'timeout' => 15,
+                'max_redirects' => 3,
+                'follow_location' => 1,
+                'protocol_version' => 1.1,
                 'header'  => "User-Agent: calendar-header-fetcher\r\n"
             )
         ));
-        $body = @file_get_contents($url, false, $context);
+        $fp = @fopen($url, 'rb', false, $context);
+        if ($fp) {
+            $body = @stream_get_contents($fp, $max_bytes + 1);
+            @fclose($fp);
+        } else {
+            $body = false;
+        }
         if ($body === false) $error = 'image download failed';
     }
 
@@ -250,6 +283,7 @@ function cal_save_data_uri_image($src, $upload_data_dir, $max_bytes, $allowed_mi
         $error = 'invalid image type';
         return false;
     }
+    // 일부 브라우저/에디터가 data URI base64 내 '+'를 공백으로 바꾸는 경우를 보정
     $binary = base64_decode(str_replace(' ', '+', $m[2]), true);
     if ($binary === false) {
         $error = 'invalid image src';
