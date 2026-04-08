@@ -2,7 +2,7 @@
 /**
  * 캘린더 위젯 – 플로팅 윈도우 (include 방식)
  * 
- * 사용법: 메인 페이지에서
+ * 사용법: 메인 페이지(tail.sub.php 추천)에서
  *   <?php include_once(G5_SKIN_PATH.'/board/calendar/calendar_widget.php'); ?>
  * 또는
  *   <?php include_once('./skin/board/calendar/calendar_widget.php'); ?>
@@ -13,6 +13,8 @@ if (!defined('_GNUBOARD_')) {
     include_once('./../../../common.php');
 }
 if (!defined('_GNUBOARD_')) exit;
+
+if (!$is_admin) return;
 
 // 위젯 설정
 $widget_bo_table = 'calendar';
@@ -90,7 +92,6 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
 
   <!-- 본문 (접기/펼치기 대상) -->
   <div class="cw-float-body">
-    <div class="cw-float-prompt"><span>~$</span> cal --upcoming --limit <?php echo $widget_count; ?> --dday</div>
 
 <?php if (empty($cw_events)) { ?>
     <div class="cw-float-empty"><span>ℹ</span> No upcoming events found.</div>
@@ -125,7 +126,7 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
             }
         }
 ?>
-    <div class="cw-float-event" style="background:<?php echo $bg_rgba; ?>; border-left:3px solid <?php echo $bdr_rgba; ?>;">
+    <div class="cw-float-event" style="background:<?php echo $bg_rgba; ?>;">
       <div class="cw-float-event-title">
         <?php echo htmlspecialchars($ev['wr_subject'], ENT_QUOTES, 'UTF-8'); ?>
         <?php if ($is_holiday) { ?><span class="cw-float-tag-holiday">공휴일</span><?php } ?>
@@ -160,7 +161,7 @@ foreach ($cw_goals as $gl) {
     if (strlen($ghex)==3) $ghex=$ghex[0].$ghex[0].$ghex[1].$ghex[1].$ghex[2].$ghex[2];
     $gbg = 'rgba('.hexdec(substr($ghex,0,2)).','.hexdec(substr($ghex,2,2)).','.hexdec(substr($ghex,4,2)).',0.06)';
 ?>
-      <div class="cw-float-goal-item" style="border-left-color:<?php echo htmlspecialchars($gc); ?>; background:<?php echo $gbg; ?>;">
+      <div class="cw-float-goal-item" style="background:<?php echo $gbg; ?>;">
         <span class="cw-float-goal-name"><?php echo htmlspecialchars($gl['wr_subject'], ENT_QUOTES, 'UTF-8'); ?></span>
         <span class="cw-float-goal-type-tag">⚑</span>
         <span class="<?php echo $dday_class; ?>"><?php echo $dday_text; ?></span>
@@ -185,7 +186,7 @@ foreach ($cw_ddays as $dl) {
     if (strlen($dhex)==3) $dhex=$dhex[0].$dhex[0].$dhex[1].$dhex[1].$dhex[2].$dhex[2];
     $dbg = 'rgba('.hexdec(substr($dhex,0,2)).','.hexdec(substr($dhex,2,2)).','.hexdec(substr($dhex,4,2)).',0.06)';
 ?>
-      <div class="cw-float-goal-item cw-float-dday-item" style="border-left-color:<?php echo htmlspecialchars($dc); ?>; background:<?php echo $dbg; ?>;">
+      <div class="cw-float-goal-item cw-float-dday-item" style="background:<?php echo $dbg; ?>;">
         <span class="cw-float-goal-name"><?php echo htmlspecialchars($dl['wr_subject'], ENT_QUOTES, 'UTF-8'); ?></span>
         <span class="cw-float-goal-type-tag cw-float-dday-tag">◈</span>
         <span class="<?php echo $dday_class; ?>"><?php echo $dday_text; ?></span>
@@ -336,15 +337,6 @@ foreach ($cw_ddays as $dl) {
   display: none;
 }
 
-/* ── 프롬프트 ── */
-.cw-float-prompt {
-  font-size: 12px;
-  color: #8e8e93;
-  margin-bottom: 12px;
-  font-family: 'Courier New', Courier, monospace;
-}
-.cw-float-prompt span { color: #34c759; }
-
 /* ── 일정 카드 ── */
 .cw-float-event {
   padding: 10px 12px;
@@ -437,7 +429,6 @@ foreach ($cw_ddays as $dl) {
   padding: 7px 10px;
   border-radius: 8px;
   margin-bottom: 5px;
-  border-left: 3px solid #af52de;
   background: #faf5ff;
 }
 .cw-float-goal-item:last-child { margin-bottom: 0; }
