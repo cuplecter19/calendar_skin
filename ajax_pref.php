@@ -14,68 +14,286 @@ $pref_table = $g5['prefix'].'calendar_user_pref';
 $mb_id = $is_member ? $member['mb_id'] : '';
 
 $VALID_THEMES = array('sakura','ocean','melon','kuromi','mocha','lemon');
-$HEADER_UPLOAD_REL_DIR = '/data/calendar_header/';
+$HEADER_UPLOAD_DATA_DIR = 'calendar_header';
+$HEADER_MAX_BYTES = 5 * 1024 * 1024;
+$HEADER_ALLOWED_MIME_EXT = array(
+    'image/jpeg' => 'jpg',
+    'image/png'  => 'png',
+    'image/gif'  => 'gif',
+    'image/webp' => 'webp'
+);
 
 function cal_starts_with($text, $prefix) {
     return strpos($text, $prefix) === 0;
 }
 
-function cal_is_local_header_src($src, $upload_rel_dir) {
-    if (!is_string($src) || $src === '') return false;
-    $normalized_upload_rel_dir = '/'.trim($upload_rel_dir, '/').'/';
-
-    $path = '';
-    $parts = parse_url($src);
-    if (is_array($parts) && isset($parts['path'])) {
-        $path = $parts['path'];
-    } else {
-        $path = $src;
+function cal_is_private_ip_address($ip) {
+    if (!is_string($ip) || $ip === '') return false;
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+        $long = ip2long($ip);
+        if ($long === false) return false;
+        $ranges = array(
+            array(ip2long('10.0.0.0'), ip2long('10.255.255.255')),
+            array(ip2long('172.16.0.0'), ip2long('172.31.255.255')),
+            array(ip2long('192.168.0.0'), ip2long('192.168.255.255')),
+            array(ip2long('127.0.0.0'), ip2long('127.255.255.255')),
+            array(ip2long('169.254.0.0'), ip2long('169.254.255.255')),
+            array(ip2long('0.0.0.0'), ip2long('0.255.255.255'))
+        );
+        foreach ($ranges as $range) {
+            if ($long >= $range[0] && $long <= $range[1]) return true;
+        }
+        return false;
     }
-    if ($path !== '' && substr($path, 0, 1) !== '/') $path = '/'.$path;
-
-    if ($path && cal_starts_with($path, $normalized_upload_rel_dir)) return true;
-
-    $data_base_path = parse_url(G5_DATA_URL, PHP_URL_PATH);
-    if (is_string($data_base_path) && $data_base_path !== '') {
-        $data_prefix = rtrim($data_base_path, '/').'/';
-        $upload_tail = ltrim($normalized_upload_rel_dir, '/');
-        if (cal_starts_with($path, $data_prefix.$upload_tail)) return true;
-    }
-
-    $prefixes = array(
-        rtrim(G5_DATA_URL, '/').$normalized_upload_rel_dir,
-        rtrim(G5_URL, '/').$normalized_upload_rel_dir,
-        $normalized_upload_rel_dir
-    );
-    foreach ($prefixes as $prefix) {
-        if (cal_starts_with($src, $prefix)) return true;
+    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        $lower = strtolower($ip);
+        if ($lower === '::1') return true;
+        if (cal_starts_with($lower, 'fc') || cal_starts_with($lower, 'fd')) return true;
+        if (cal_starts_with($lower, 'fe8') || cal_starts_with($lower, 'fe9') || cal_starts_with($lower, 'fea') || cal_starts_with($lower, 'feb')) return true;
     }
     return false;
 }
 
-function cal_remove_local_header_file($src, $upload_rel_dir) {
-    if (!cal_is_local_header_src($src, $upload_rel_dir)) return;
+function cal_extract_local_header_filename($src, $upload_data_dir) {
+    if (!is_string($src) || $src === '') return false;
 
-    $base_data_url = rtrim(G5_DATA_URL, '/');
-    $base_site_url = rtrim(G5_URL, '/');
-    $relative = $src;
-    if (cal_starts_with($src, $base_data_url.'/')) {
-        $relative = '/'.ltrim(substr($src, strlen($base_data_url)), '/');
-    } elseif (cal_starts_with($src, $base_site_url.'/')) {
-        $relative = '/'.ltrim(substr($src, strlen($base_site_url)), '/');
+    $src = trim($src);
+    $parts = parse_url($src);
+    if (!is_array($parts)) {
+        $parts = array();
+        $parts['path'] = $src;
     }
 
-    if (!cal_starts_with($relative, $upload_rel_dir)) return;
+    if (isset($parts['scheme']) && !in_array(strtolower($parts['scheme']), array('http', 'https'))) return false;
 
-    $target = rtrim(G5_PATH, '/').$relative;
-    $base_dir = rtrim(G5_PATH, '/').$upload_rel_dir;
-    $base_real = realpath($base_dir);
-    if ($base_real === false) return;
-    $target_dir_real = realpath(dirname($target));
-    if ($target_dir_real === false) return;
-    $target_real = $target_dir_real.'/'.basename($target);
-    if (!cal_starts_with($target_real, rtrim($base_real, '/').'/')) return;
-    if (is_file($target)) @unlink($target);
+    if (isset($parts['host'])) {
+        $src_host = strtolower($parts['host']);
+        $site_host = parse_url(G5_URL, PHP_URL_HOST);
+        $data_host = parse_url(G5_DATA_URL, PHP_URL_HOST);
+        $site_host = is_string($site_host) ? strtolower($site_host) : '';
+        $data_host = is_string($data_host) ? strtolower($data_host) : '';
+        if ($src_host !== $site_host && $src_host !== $data_host) return false;
+    }
+
+    $path = isset($parts['path']) ? $parts['path'] : '';
+    if ($path === '') return false;
+    if (substr($path, 0, 1) !== '/') $path = '/'.$path;
+    $path = preg_replace('#/+#', '/', $path);
+
+    $upload_tail = trim($upload_data_dir, '/').'/';
+    $prefixes = array('/'.$upload_tail, '/data/'.$upload_tail);
+    $data_base_path = parse_url(G5_DATA_URL, PHP_URL_PATH);
+    if (is_string($data_base_path) && $data_base_path !== '') {
+        $prefixes[] = rtrim($data_base_path, '/').'/'.$upload_tail;
+    }
+
+    foreach ($prefixes as $prefix) {
+        if (cal_starts_with($path, $prefix)) {
+            $filename = basename($path);
+            if (preg_match('/^[A-Za-z0-9._-]+$/', $filename)) {
+                return $filename;
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+function cal_is_local_header_src($src, $upload_data_dir) {
+    return cal_extract_local_header_filename($src, $upload_data_dir) !== false;
+}
+
+function cal_normalize_local_header_src($src, $upload_data_dir) {
+    $filename = cal_extract_local_header_filename($src, $upload_data_dir);
+    if ($filename === false) return '';
+    return rtrim(G5_DATA_URL, '/').'/'.trim($upload_data_dir, '/').'/'.$filename;
+}
+
+function cal_remove_local_header_file($src, $upload_data_dir) {
+    $filename = cal_extract_local_header_filename($src, $upload_data_dir);
+    if ($filename === false) return;
+    $path = rtrim(G5_DATA_PATH, '/').'/'.trim($upload_data_dir, '/').'/'.$filename;
+    if (is_file($path)) @unlink($path);
+}
+
+function cal_ensure_header_upload_dir($upload_data_dir) {
+    $dir = rtrim(G5_DATA_PATH, '/').'/'.trim($upload_data_dir, '/');
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    if (!is_dir($dir) || !is_writable($dir)) return false;
+    return $dir;
+}
+
+function cal_make_random_token() {
+    $rand = '';
+    if (function_exists('openssl_random_pseudo_bytes')) {
+        $bytes = openssl_random_pseudo_bytes(8);
+        if ($bytes !== false) $rand = bin2hex($bytes);
+    }
+    if ($rand === '') $rand = substr(sha1(uniqid(mt_rand(), true)), 0, 16);
+    return $rand;
+}
+
+function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
+    $error = '';
+    $body = false;
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'calendar-header-fetcher');
+        $body = curl_exec($ch);
+        if ($body === false) $error = 'image download failed';
+        $status = intval(curl_getinfo($ch, CURLINFO_HTTP_CODE));
+        curl_close($ch);
+        if ($body !== false && ($status < 200 || $status >= 300)) {
+            $error = 'image download failed';
+            $body = false;
+        }
+    } else {
+        $context = stream_context_create(array(
+            'http' => array(
+                'method'  => 'GET',
+                'timeout' => 15,
+                'header'  => "User-Agent: calendar-header-fetcher\r\n"
+            )
+        ));
+        $body = @file_get_contents($url, false, $context);
+        if ($body === false) $error = 'image download failed';
+    }
+
+    if (!is_string($body) || $body === '') {
+        if ($error === '') $error = 'image download failed';
+        return false;
+    }
+    if (strlen($body) > $max_bytes) {
+        $error = 'max 5MB';
+        return false;
+    }
+    return $body;
+}
+
+function cal_detect_image_mime($binary, $allowed_mime_ext) {
+    $mime = '';
+    if (function_exists('finfo_open')) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        if ($finfo) {
+            $mime = finfo_buffer($finfo, $binary);
+            finfo_close($finfo);
+        }
+    }
+    if ((!$mime || !isset($allowed_mime_ext[$mime])) && function_exists('getimagesizefromstring')) {
+        $info = @getimagesizefromstring($binary);
+        if (is_array($info) && isset($info['mime'])) $mime = $info['mime'];
+    }
+    if (isset($allowed_mime_ext[$mime])) return $mime;
+    return '';
+}
+
+function cal_save_image_binary($binary, $upload_data_dir, $max_bytes, $allowed_mime_ext, &$error) {
+    $error = '';
+    if (!is_string($binary) || $binary === '') {
+        $error = 'invalid image data';
+        return false;
+    }
+    if (strlen($binary) > $max_bytes) {
+        $error = 'max 5MB';
+        return false;
+    }
+
+    $mime = cal_detect_image_mime($binary, $allowed_mime_ext);
+    if (!$mime) {
+        $error = 'invalid image type';
+        return false;
+    }
+
+    $dir = cal_ensure_header_upload_dir($upload_data_dir);
+    if ($dir === false) {
+        $error = 'upload dir not writable';
+        return false;
+    }
+
+    $filename = 'header_'.cal_make_random_token().'.'.$allowed_mime_ext[$mime];
+    $path = $dir.'/'.$filename;
+    $written = @file_put_contents($path, $binary, LOCK_EX);
+    if ($written === false) {
+        $error = 'save failed';
+        return false;
+    }
+    return rtrim(G5_DATA_URL, '/').'/'.trim($upload_data_dir, '/').'/'.$filename;
+}
+
+function cal_save_data_uri_image($src, $upload_data_dir, $max_bytes, $allowed_mime_ext, &$error) {
+    $error = '';
+    if (!preg_match('/^data:image\/([a-z0-9.+-]+);base64,(.+)$/i', $src, $m)) {
+        $error = 'invalid image src';
+        return false;
+    }
+    $raw_type = strtolower($m[1]);
+    if ($raw_type === 'jpg') $raw_type = 'jpeg';
+    $expected_mime = 'image/'.$raw_type;
+    if (!isset($allowed_mime_ext[$expected_mime])) {
+        $error = 'invalid image type';
+        return false;
+    }
+    $binary = base64_decode(str_replace(' ', '+', $m[2]), true);
+    if ($binary === false) {
+        $error = 'invalid image src';
+        return false;
+    }
+    return cal_save_image_binary($binary, $upload_data_dir, $max_bytes, $allowed_mime_ext, $error);
+}
+
+function cal_validate_remote_image_url($src, &$error) {
+    $error = '';
+    if (filter_var($src, FILTER_VALIDATE_URL) === false) {
+        $error = 'invalid image src';
+        return false;
+    }
+    $parts = parse_url($src);
+    if (!is_array($parts) || !isset($parts['scheme']) || !in_array(strtolower($parts['scheme']), array('http', 'https'))) {
+        $error = 'invalid image src';
+        return false;
+    }
+    if (empty($parts['host'])) {
+        $error = 'invalid image src';
+        return false;
+    }
+
+    $host = strtolower($parts['host']);
+    if ($host === 'localhost') {
+        $error = 'blocked host';
+        return false;
+    }
+
+    if (filter_var($host, FILTER_VALIDATE_IP) && cal_is_private_ip_address($host)) {
+        $error = 'blocked host';
+        return false;
+    }
+
+    if (function_exists('gethostbynamel')) {
+        $ips = @gethostbynamel($host);
+        if (is_array($ips) && count($ips) > 0) {
+            foreach ($ips as $ip) {
+                if (cal_is_private_ip_address($ip)) {
+                    $error = 'blocked host';
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+function cal_save_remote_image($src, $upload_data_dir, $max_bytes, $allowed_mime_ext, &$error) {
+    $error = '';
+    if (!cal_validate_remote_image_url($src, $error)) return false;
+    $binary = cal_fetch_remote_image_binary($src, $max_bytes, $error);
+    if ($binary === false) return false;
+    return cal_save_image_binary($binary, $upload_data_dir, $max_bytes, $allowed_mime_ext, $error);
 }
 
 function cal_parse_header_image_payload($input) {
@@ -189,27 +407,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $parsed = $payload['data'];
         if (is_array($parsed) && isset($parsed['src'])) {
-            $src = $parsed['src'];
-            // Validate src: must be URL/data URI/or local uploaded file URL
-            $is_valid_url = false;
-            if (filter_var($src, FILTER_VALIDATE_URL) !== false) {
-                $parts = parse_url($src);
-                if (is_array($parts) && isset($parts['scheme']) && in_array(strtolower($parts['scheme']), array('http', 'https'))) {
-                    $is_valid_url = true;
+            $src = trim($parsed['src']);
+            if ($src !== '') {
+                $final_src = '';
+                $save_error = '';
+                if (cal_is_local_header_src($src, $HEADER_UPLOAD_DATA_DIR)) {
+                    $final_src = cal_normalize_local_header_src($src, $HEADER_UPLOAD_DATA_DIR);
+                } elseif (preg_match('/^data:image\//i', $src)) {
+                    $final_src = cal_save_data_uri_image($src, $HEADER_UPLOAD_DATA_DIR, $HEADER_MAX_BYTES, $HEADER_ALLOWED_MIME_EXT, $save_error);
+                } else {
+                    $final_src = cal_save_remote_image($src, $HEADER_UPLOAD_DATA_DIR, $HEADER_MAX_BYTES, $HEADER_ALLOWED_MIME_EXT, $save_error);
                 }
-            }
-            $is_data_uri  = preg_match('/^data:image\//i', $src);
-            $is_local_file = cal_is_local_header_src($src, $HEADER_UPLOAD_REL_DIR);
-            if ($is_valid_url || $is_data_uri || $is_local_file) {
+
+                if (!$final_src) {
+                    echo json_encode(array('success'=>false,'error'=>$save_error ? $save_error : 'invalid image src')); exit;
+                }
+
                 $safe = array(
-                    'src' => $src,
-                    'type' => isset($parsed['type']) && in_array($parsed['type'], array('url','file')) ? $parsed['type'] : 'url',
+                    'src' => $final_src,
+                    'type' => 'file',
                     'height' => isset($parsed['height']) ? max(60, min(400, intval($parsed['height']))) : 160,
                     'fit' => isset($parsed['fit']) && in_array($parsed['fit'], array('cover','contain','fill')) ? $parsed['fit'] : 'cover'
                 );
                 $header_image_json = json_encode($safe);
-            } else {
-                echo json_encode(array('success'=>false,'error'=>'invalid image src')); exit;
             }
         } elseif (is_array($parsed)) {
             echo json_encode(array('success'=>false,'error'=>'invalid header_image data')); exit;
@@ -236,7 +456,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($old_src && $old_src !== $new_src) {
-            cal_remove_local_header_file($old_src, $HEADER_UPLOAD_REL_DIR);
+            cal_remove_local_header_file($old_src, $HEADER_UPLOAD_DATA_DIR);
         }
 
         $himg_val = $header_image_json ? "'".sql_real_escape_string($header_image_json)."'" : "NULL";
