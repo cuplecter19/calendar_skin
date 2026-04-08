@@ -49,7 +49,7 @@ function cal_is_private_ip_address($ip) {
         $lower = strtolower($ip);
         if ($lower === '::1') return true;
         if (cal_starts_with($lower, 'fc') || cal_starts_with($lower, 'fd')) return true;
-        if (cal_starts_with($lower, 'fe8') || cal_starts_with($lower, 'fe9') || cal_starts_with($lower, 'fea') || cal_starts_with($lower, 'feb') || cal_starts_with($lower, 'fec') || cal_starts_with($lower, 'fed') || cal_starts_with($lower, 'fee') || cal_starts_with($lower, 'fef')) return true;
+        if (preg_match('/^fe[89a-f]/', $lower)) return true;
     }
     return false;
 }
@@ -290,7 +290,7 @@ function cal_save_data_uri_image($src, $upload_data_dir, $max_bytes, $allowed_mi
         $error = 'invalid image type';
         return false;
     }
-    // 일부 브라우저/에디터가 data URI base64 내 '+'를 공백으로 바꾸는 경우를 보정
+    // Normalize malformed payloads where '+' in data URI base64 is converted to spaces.
     $binary = base64_decode(str_replace(' ', '+', $m[2]), true);
     if ($binary === false) {
         $error = 'invalid image src';
