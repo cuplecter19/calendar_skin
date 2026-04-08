@@ -3,6 +3,12 @@
    ══════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&display=swap');
+@font-face {
+    font-family: 'Paperozi';
+    src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/2408-3@1.0/Paperlogy-4Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-display: swap;
+}
 
 /* ══════════════════════════════════════
    CSS 변수 – 기본 테마: 벚꽃 (sakura)
@@ -348,7 +354,7 @@
   background: var(--cal-bg);
   border-radius: 24px;
   box-shadow: 0 4px 24px var(--cal-shadow);
-  font-family: 'Pretendard', -apple-system, sans-serif;
+  font-family: 'Paperozi', 'Pretendard', -apple-system, sans-serif;
   color: var(--cal-text);
   transition: background .35s ease, color .35s ease, box-shadow .35s ease;
   overflow: hidden;
@@ -514,9 +520,10 @@
   font-size: 22px;
   font-weight: 600;
   color: var(--cal-title);
-  margin: 0;
+  margin: 3px 0;
   word-break: keep-all;
   letter-spacing: -0.5px;
+  line-height: 1.2em;
   transition: color .35s ease;
 }
 .cal-header-right {
@@ -670,7 +677,7 @@
 /* ── 모달 ── */
 .cal-modal { position:fixed; inset:0; z-index:9999; display:none; overflow:hidden; }
 .cal-modal-backdrop { position:absolute; inset:0; background:var(--cal-modal-backdrop); backdrop-filter:blur(2px); }
-.cal-modal-content { position:relative; z-index:2; width:min(520px, calc(100vw - 24px)); max-height:calc(100vh - 24px); margin:12px auto; background:var(--cal-modal-bg); border-radius:20px; padding:20px; overflow:auto; box-sizing:border-box; box-shadow:0 8px 32px rgba(0,0,0,.1); transition:background .35s ease; }
+.cal-modal-content { position:relative; z-index:2; width:min(520px, calc(100vw - 24px)); max-height:calc(100vh - 24px); translate: 0 5vw; margin:12px auto; background:var(--cal-modal-bg); border-radius:20px; padding:20px; overflow:auto; box-sizing:border-box; box-shadow:0 8px 32px rgba(0,0,0,.1); transition:background .35s ease;}
 .cal-modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
 .cal-modal-header h3 { margin:0; font-size:16px; font-weight:600; color:var(--cal-text); }
 .cal-modal-header button { background:var(--cal-btn-bg); border:1px solid var(--cal-btn-border); border-radius:10px; font-size:16px; cursor:pointer; color:var(--cal-btn-text); padding:4px 10px; transition:all .15s; }
