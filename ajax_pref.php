@@ -25,7 +25,7 @@ function cal_is_local_header_src($src, $upload_rel_dir) {
     $normalized_upload_rel_dir = '/'.trim($upload_rel_dir, '/').'/';
 
     $path = '';
-    $parts = @parse_url($src);
+    $parts = parse_url($src);
     if (is_array($parts) && isset($parts['path'])) {
         $path = $parts['path'];
     } else {
@@ -35,7 +35,7 @@ function cal_is_local_header_src($src, $upload_rel_dir) {
 
     if ($path && cal_starts_with($path, $normalized_upload_rel_dir)) return true;
 
-    $data_base_path = @parse_url(G5_DATA_URL, PHP_URL_PATH);
+    $data_base_path = parse_url(G5_DATA_URL, PHP_URL_PATH);
     if (is_string($data_base_path) && $data_base_path !== '') {
         $data_prefix = rtrim($data_base_path, '/').'/';
         $upload_tail = ltrim($normalized_upload_rel_dir, '/');

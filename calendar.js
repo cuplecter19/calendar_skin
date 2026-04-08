@@ -52,7 +52,7 @@ var CalendarBoard = (function() {
   }
 
   function saveHeaderImageToServer(data, callback){
-    if (!config.pref_url) { if (callback) callback(true); return; }
+    if (!config.pref_url) return;
     var xhr = new XMLHttpRequest();
     xhr.open('POST', config.pref_url, true);
     xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
