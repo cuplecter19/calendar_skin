@@ -135,7 +135,7 @@ function cal_make_random_token() {
 
 function cal_max_size_error($max_bytes) {
     $mb = $max_bytes / (1024 * 1024);
-    if ($mb == intval($mb)) return 'max '.intval($mb).'MB';
+    if ($mb === intval($mb)) return 'max '.intval($mb).'MB';
     return 'max '.round($mb, 2).'MB';
 }
 
@@ -290,7 +290,7 @@ function cal_save_data_uri_image($src, $upload_data_dir, $max_bytes, $allowed_mi
         $error = 'invalid image type';
         return false;
     }
-    // Normalize malformed payloads where '+' in data URI base64 is converted to spaces.
+    // Some clients can convert '+' to spaces during HTTP transmission; normalize before decoding.
     $binary = base64_decode(str_replace(' ', '+', $m[2]), true);
     if ($binary === false) {
         $error = 'invalid image src';
