@@ -133,6 +133,12 @@ function cal_make_random_token() {
     return $rand;
 }
 
+function cal_max_size_error($max_bytes) {
+    $mb = $max_bytes / (1024 * 1024);
+    if ($mb == intval($mb)) return 'max '.intval($mb).'MB';
+    return 'max '.round($mb, 2).'MB';
+}
+
 function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
     $error = '';
     $body = false;
@@ -162,9 +168,10 @@ function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
         $effective_url = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL);
         $curl_errno = curl_errno($ch);
         curl_close($ch);
-        if ($result === false || $curl_errno === CURLE_WRITE_ERROR) {
+        $write_error_no = defined('CURLE_WRITE_ERROR') ? CURLE_WRITE_ERROR : 23;
+        if ($result === false || $curl_errno === $write_error_no) {
             if (strlen($body) > $max_bytes) {
-                $error = 'max 5MB';
+                $error = cal_max_size_error($max_bytes);
             } else {
                 $error = 'image download failed';
             }
@@ -214,7 +221,7 @@ function cal_fetch_remote_image_binary($url, $max_bytes, &$error) {
         return false;
     }
     if (strlen($body) > $max_bytes) {
-        $error = 'max 5MB';
+        $error = cal_max_size_error($max_bytes);
         return false;
     }
     return $body;
@@ -244,7 +251,7 @@ function cal_save_image_binary($binary, $upload_data_dir, $max_bytes, $allowed_m
         return false;
     }
     if (strlen($binary) > $max_bytes) {
-        $error = 'max 5MB';
+        $error = cal_max_size_error($max_bytes);
         return false;
     }
 
