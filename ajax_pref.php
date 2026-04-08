@@ -27,6 +27,14 @@ function cal_starts_with($text, $prefix) {
     return strpos($text, $prefix) === 0;
 }
 
+function cal_is_safe_header_filename($filename) {
+    if (!is_string($filename) || $filename === '') return false;
+    if ($filename === '.' || $filename === '..') return false;
+    if (strpos($filename, '..') !== false) return false;
+    if (!preg_match('/^[A-Za-z0-9._-]+$/', $filename)) return false;
+    return true;
+}
+
 function cal_is_private_ip_address($ip) {
     if (!is_string($ip) || $ip === '') return false;
     if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
@@ -77,6 +85,10 @@ function cal_extract_local_header_filename($src, $upload_data_dir) {
 
     $path = isset($parts['path']) ? $parts['path'] : '';
     if ($path === '') return false;
+    $path = str_replace('\\', '/', $path);
+    $path = rawurldecode($path);
+    if (strpos($path, "\0") !== false) return false;
+    if (preg_match('#/(?:\.{1,2})(?:/|$)#', $path)) return false;
     if (substr($path, 0, 1) !== '/') $path = '/'.$path;
     $path = preg_replace('#/+#', '/', $path);
 
@@ -90,11 +102,17 @@ function cal_extract_local_header_filename($src, $upload_data_dir) {
     foreach ($prefixes as $prefix) {
         if (cal_starts_with($path, $prefix)) {
             $filename = basename($path);
-            if (preg_match('/^[A-Za-z0-9._-]+$/', $filename)) {
+            if (cal_is_safe_header_filename($filename)) {
                 return $filename;
             }
             return false;
         }
+    }
+
+    // 경로 형태가 달라도 동일 사이트 내 calendar_header 파일이면 허용
+    $upload_dir_name = trim($upload_data_dir, '/');
+    if ($upload_dir_name !== '' && preg_match('#/'.preg_quote($upload_dir_name, '#').'/([^/]+)$#i', $path, $m) && cal_is_safe_header_filename($m[1])) {
+        return $m[1];
     }
     return false;
 }
@@ -508,10 +526,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($old_src && $old_src !== $new_src) {
-            cal_remove_local_header_file($old_src, $HEADER_UPLOAD_DATA_DIR);
-        }
-
         $himg_val = $header_image_json ? "'".sql_real_escape_string($header_image_json)."'" : "NULL";
         if ($global_existing && $global_existing['mb_id']) {
             sql_query("UPDATE {$pref_table} SET header_image={$himg_val}, updated_at=NOW() WHERE mb_id='__global__'");
@@ -521,6 +535,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     theme='sakura',
                     header_image={$himg_val},
                     updated_at=NOW()");
+        }
+
+        if ($old_src && $old_src !== $new_src) {
+            cal_remove_local_header_file($old_src, $HEADER_UPLOAD_DATA_DIR);
         }
 
         echo json_encode(array('success'=>true));
