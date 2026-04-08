@@ -55,7 +55,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (is_array($parsed) && isset($parsed['src'])) {
             // Validate src: must be a URL or data URI
             $src = $parsed['src'];
-            if (preg_match('/^https?:\/\/.+/i', $src) || preg_match('/^data:image\//i', $src)) {
+            $is_valid_url = filter_var($src, FILTER_VALIDATE_URL) && preg_match('/^https?:\/\//i', $src);
+            $is_data_uri  = preg_match('/^data:image\//i', $src);
+            if ($is_valid_url || $is_data_uri) {
                 $safe = array(
                     'src' => $src,
                     'type' => isset($parsed['type']) && in_array($parsed['type'], array('url','file')) ? $parsed['type'] : 'url',
@@ -92,7 +94,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         sql_query("UPDATE {$pref_table} SET ".implode(',', $sets)." WHERE mb_id='".sql_real_escape_string($mb_id)."'");
     } else {
         $theme_val = $theme ? $theme : 'sakura';
-        sql_query("INSERT INTO {$pref_table} SET mb_id='".sql_real_escape_string($mb_id)."', theme='".sql_real_escape_string($theme_val)."', header_image=".($header_image_json ? "'".sql_real_escape_string($header_image_json)."'" : "NULL").", updated_at=NOW()");
+        $himg_val  = $header_image_json ? "'".sql_real_escape_string($header_image_json)."'" : "NULL";
+        sql_query("INSERT INTO {$pref_table}
+            SET mb_id='".sql_real_escape_string($mb_id)."',
+                theme='".sql_real_escape_string($theme_val)."',
+                header_image=".$himg_val.",
+                updated_at=NOW()");
     }
 
     echo json_encode(array('success'=>true));
