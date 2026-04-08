@@ -66,8 +66,13 @@ while($row = sql_fetch_array($lr)){
 /* ======================================================
    2) GOOGLE -> LOCAL (다중 캘린더 조회 + 공휴일 색상)
    ====================================================== */
-$time_min = gmdate('c', strtotime($cal_year.'-'.$month_str.'-01 00:00:00 +0900'));
-$time_max = gmdate('c', strtotime($cal_year.'-'.$month_str.'-'.$days_in_month.' 23:59:59 +0900'));
+// 변경 전 (해당 월만)
+// $time_min = gmdate('c', strtotime($cal_year.'-'.$month_str.'-01 00:00:00 +0900'));
+// $time_max = gmdate('c', strtotime($cal_year.'-'.$month_str.'-'.$days_in_month.' 23:59:59 +0900'));
+
+// 변경 후 (해당 연도 전체)
+$time_min = gmdate('c', strtotime($cal_year.'-01-01 00:00:00 +0900'));
+$time_max = gmdate('c', strtotime($cal_year.'-12-31 23:59:59 +0900'));
 
 // 구글 캘린더 색상 ID → HEX 매핑
 $google_color_map = array(
@@ -98,10 +103,7 @@ foreach ($GCAL_SOURCE_CALENDARS as $source_cal_id) {
         $dd = json_decode($gr['body'], true);
         if (isset($dd['items']) && is_array($dd['items'])) $events = $dd['items'];
     } else {
-        // 공휴일 캘린더는 접근 실패해도 전체 에러로 처리하지 않음
-        if (!$is_holiday_cal) {
-            $error = 'Google API Error HTTP '.$gr['http'].' for calendar '.$source_cal_id;
-        }
+        $error .= 'API Error HTTP '.$gr['http'].' for '.$source_cal_id.'; ';
         continue;
     }
 

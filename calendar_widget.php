@@ -2,7 +2,7 @@
 /**
  * 캘린더 위젯 – 플로팅 윈도우 (include 방식)
  * 
- * 사용법: 메인 페이지에서
+ * 사용법: 메인 페이지(tail.sub.php 추천)에서
  *   <?php include_once(G5_SKIN_PATH.'/board/calendar/calendar_widget.php'); ?>
  * 또는
  *   <?php include_once('./skin/board/calendar/calendar_widget.php'); ?>
@@ -13,6 +13,9 @@ if (!defined('_GNUBOARD_')) {
     include_once('./../../../common.php');
 }
 if (!defined('_GNUBOARD_')) exit;
+
+// 관리자가 아니어도 위젯을 보여주고 싶으면 아래 줄 삭제
+if (!$is_admin) return;
 
 // 위젯 설정
 $widget_bo_table = 'calendar';
@@ -27,12 +30,14 @@ $_cw_table_exists = ($_cw_chk && sql_fetch_array($_cw_chk));
 
 $cw_events = array();
 $cw_goals  = array();
+$cw_ddays  = array();
 
 if ($_cw_table_exists) {
-    // 다가오는 일정 조회
+    // 위젯에 표시할 다가오는 일정 조회 (WIDGET=1 플래그 필수)
     $sql = "SELECT wr_id, wr_subject, wr_1, wr_2, wr_3, wr_6, wr_7, wr_5, wr_9
             FROM {$widget_write_table}
             WHERE wr_is_comment=0
+              AND wr_9 LIKE '%WIDGET=1%'
               AND (wr_1 >= '{$today}' OR (wr_2 >= '{$today}' AND wr_1 <= '{$today}'))
             ORDER BY wr_1 ASC, wr_6 ASC
             LIMIT {$widget_count}";
@@ -41,17 +46,31 @@ if ($_cw_table_exists) {
         $cw_events[] = $row;
     }
 
-    // D-day Goal 조회
+    // 위젯에 표시할 Goal (WIDGET=1 플래그 필수)
     $goal_sql = "SELECT wr_id, wr_subject, wr_1, wr_2, wr_3, wr_9
                  FROM {$widget_write_table}
                  WHERE wr_is_comment=0
                    AND wr_9 LIKE '%GOAL=1%'
+                   AND wr_9 LIKE '%WIDGET=1%'
                    AND wr_1 >= '{$today}'
                  ORDER BY wr_1 ASC
                  LIMIT 5";
     $goal_result = sql_query($goal_sql);
     while ($row = sql_fetch_array($goal_result)) {
         $cw_goals[] = $row;
+    }
+
+    // 위젯에 표시할 D-day 기념일 (WIDGET=1 플래그 필수, 과거 포함)
+    $dday_sql = "SELECT wr_id, wr_subject, wr_1, wr_2, wr_3, wr_9
+                 FROM {$widget_write_table}
+                 WHERE wr_is_comment=0
+                   AND wr_9 LIKE '%DDAY=1%'
+                   AND wr_9 LIKE '%WIDGET=1%'
+                 ORDER BY wr_1 ASC
+                 LIMIT 5";
+    $dday_result = sql_query($dday_sql);
+    while ($row = sql_fetch_array($dday_result)) {
+        $cw_ddays[] = $row;
     }
 }
 
@@ -75,7 +94,6 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
 
   <!-- 본문 (접기/펼치기 대상) -->
   <div class="cw-float-body">
-    <div class="cw-float-prompt"><span>~$</span> cal --upcoming --limit <?php echo $widget_count; ?></div>
 
 <?php if (empty($cw_events)) { ?>
     <div class="cw-float-empty"><span>ℹ</span> No upcoming events found.</div>
@@ -110,7 +128,7 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
             }
         }
 ?>
-    <div class="cw-float-event" style="background:<?php echo $bg_rgba; ?>; border-left:3px solid <?php echo $bdr_rgba; ?>;">
+    <div class="cw-float-event" style="background:<?php echo $bg_rgba; ?>;">
       <div class="cw-float-event-title">
         <?php echo htmlspecialchars($ev['wr_subject'], ENT_QUOTES, 'UTF-8'); ?>
         <?php if ($is_holiday) { ?><span class="cw-float-tag-holiday">공휴일</span><?php } ?>
@@ -125,31 +143,60 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
     }
 } ?>
 
-    <!-- D-day Goal 섹션 -->
+    <!-- D-day 섹션 -->
     <div class="cw-float-goal-section">
-      <div class="cw-float-goal-label"><span>⚑</span> D-day Goals</div>
-<?php if (empty($cw_goals)) { ?>
-      <div class="cw-float-goal-empty">설정된 목표가 없습니다.</div>
-<?php } else {
-    $today_ts_cw2 = strtotime($today);
-    foreach ($cw_goals as $gl) {
-        $target_ts = strtotime($gl['wr_1']);
-        $diff = intval(($target_ts - $today_ts_cw2) / 86400);
-        if ($diff < 0) continue;
-        $dday_text  = ($diff === 0) ? 'D-Day!' : 'D-'.$diff;
-        $dday_class = ($diff === 0) ? 'cw-float-goal-dday dday-today' : 'cw-float-goal-dday';
-        $gc = $gl['wr_3'] ? $gl['wr_3'] : '#af52de';
-        $ghex = ltrim($gc, '#');
-        if (strlen($ghex)==3) $ghex=$ghex[0].$ghex[0].$ghex[1].$ghex[1].$ghex[2].$ghex[2];
-        $gbg = 'rgba('.hexdec(substr($ghex,0,2)).','.hexdec(substr($ghex,2,2)).','.hexdec(substr($ghex,4,2)).',0.06)';
+      <div class="cw-float-goal-label"><span>◈</span> D-day</div>
+<?php
+$cw_has_dday_items = false;
+$today_ts_cw2 = strtotime($today);
+
+// Goal 항목 표시
+foreach ($cw_goals as $gl) {
+    $target_ts = strtotime($gl['wr_1']);
+    $diff = intval(($target_ts - $today_ts_cw2) / 86400);
+    if ($diff < 0) continue;
+    $cw_has_dday_items = true;
+    $dday_text  = ($diff === 0) ? 'D-Day!' : 'D-'.$diff;
+    $dday_class = ($diff === 0) ? 'cw-float-goal-dday dday-today' : 'cw-float-goal-dday';
+    $gc = $gl['wr_3'] ? $gl['wr_3'] : '#af52de';
+    $ghex = ltrim($gc, '#');
+    if (strlen($ghex)==3) $ghex=$ghex[0].$ghex[0].$ghex[1].$ghex[1].$ghex[2].$ghex[2];
+    $gbg = 'rgba('.hexdec(substr($ghex,0,2)).','.hexdec(substr($ghex,2,2)).','.hexdec(substr($ghex,4,2)).',0.06)';
 ?>
-      <div class="cw-float-goal-item" style="border-left-color:<?php echo htmlspecialchars($gc); ?>; background:<?php echo $gbg; ?>;">
+      <div class="cw-float-goal-item" style="background:<?php echo $gbg; ?>;">
         <span class="cw-float-goal-name"><?php echo htmlspecialchars($gl['wr_subject'], ENT_QUOTES, 'UTF-8'); ?></span>
+        <span class="cw-float-goal-type-tag">⚑</span>
         <span class="<?php echo $dday_class; ?>"><?php echo $dday_text; ?></span>
       </div>
+<?php } ?>
 <?php
+// D-day 기념일 항목 표시
+foreach ($cw_ddays as $dl) {
+    $cw_has_dday_items = true;
+    $target_ts = strtotime($dl['wr_1']);
+    $diff = intval(($target_ts - $today_ts_cw2) / 86400);
+    if ($diff > 0) {
+        $dday_text = 'D-'.$diff;
+    } elseif ($diff === 0) {
+        $dday_text = 'D-Day!';
+    } else {
+        $dday_text = 'D+'.abs($diff);
     }
-} ?>
+    $dday_class = ($diff === 0) ? 'cw-float-goal-dday dday-today' : (($diff < 0) ? 'cw-float-goal-dday cw-float-dday-past' : 'cw-float-goal-dday cw-float-dday-future');
+    $dc = $dl['wr_3'] ? $dl['wr_3'] : '#007aff';
+    $dhex = ltrim($dc, '#');
+    if (strlen($dhex)==3) $dhex=$dhex[0].$dhex[0].$dhex[1].$dhex[1].$dhex[2].$dhex[2];
+    $dbg = 'rgba('.hexdec(substr($dhex,0,2)).','.hexdec(substr($dhex,2,2)).','.hexdec(substr($dhex,4,2)).',0.06)';
+?>
+      <div class="cw-float-goal-item cw-float-dday-item" style="background:<?php echo $dbg; ?>;">
+        <span class="cw-float-goal-name"><?php echo htmlspecialchars($dl['wr_subject'], ENT_QUOTES, 'UTF-8'); ?></span>
+        <span class="cw-float-goal-type-tag cw-float-dday-tag">◈</span>
+        <span class="<?php echo $dday_class; ?>"><?php echo $dday_text; ?></span>
+      </div>
+<?php } ?>
+<?php if (!$cw_has_dday_items) { ?>
+      <div class="cw-float-goal-empty">설정된 D-day가 없습니다.</div>
+<?php } ?>
     </div>
 
     <!-- 하단 링크 -->
@@ -292,15 +339,6 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
   display: none;
 }
 
-/* ── 프롬프트 ── */
-.cw-float-prompt {
-  font-size: 12px;
-  color: #8e8e93;
-  margin-bottom: 12px;
-  font-family: 'Courier New', Courier, monospace;
-}
-.cw-float-prompt span { color: #34c759; }
-
 /* ── 일정 카드 ── */
 .cw-float-event {
   padding: 10px 12px;
@@ -393,7 +431,6 @@ $_cw_uid = 'cw_' . substr(md5('cal_widget'), 0, 6);
   padding: 7px 10px;
   border-radius: 8px;
   margin-bottom: 5px;
-  border-left: 3px solid #af52de;
   background: #faf5ff;
 }
 .cw-float-goal-item:last-child { margin-bottom: 0; }
