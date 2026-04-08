@@ -78,6 +78,44 @@ function cal_remove_local_header_file($src, $upload_rel_dir) {
     if (is_file($target)) @unlink($target);
 }
 
+function cal_parse_header_image_payload($input) {
+    if (is_array($input)) {
+        return array('ok' => true, 'data' => $input);
+    }
+
+    if (!is_string($input)) {
+        return array('ok' => false, 'data' => null);
+    }
+
+    $raw = trim($input);
+    if ($raw === '' || strtolower($raw) === 'null') {
+        return array('ok' => true, 'data' => null);
+    }
+
+    $parsed = json_decode($raw, true);
+    if (is_array($parsed)) {
+        return array('ok' => true, 'data' => $parsed);
+    }
+
+    // 레거시/이중 인코딩 대응
+    if (is_string($parsed)) {
+        $parsed2 = json_decode($parsed, true);
+        if (is_array($parsed2)) {
+            return array('ok' => true, 'data' => $parsed2);
+        }
+        $raw = trim($parsed);
+    }
+
+    // 레거시 포맷: src 문자열만 전송된 경우
+    return array(
+        'ok' => true,
+        'data' => array(
+            'src' => $raw,
+            'type' => 'url'
+        )
+    );
+}
+
 /* ── GET: 설정 불러오기 (로그인 불필요 – 헤더 이미지는 전역 공유) ── */
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // 전역 헤더 이미지는 __global__ 레코드에서 읽기 (비로그인 방문자도 접근 가능)
@@ -107,7 +145,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 /* ── POST: 설정 저장 ── */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $theme = isset($_POST['theme']) ? trim($_POST['theme']) : '';
-    $header_image_raw = isset($_POST['header_image']) ? trim($_POST['header_image']) : '';
+    $has_header_image_input = array_key_exists('header_image', $_POST);
+    $header_image_input = $has_header_image_input ? $_POST['header_image'] : null;
 
     // Validate theme
     if ($theme && !in_array($theme, $VALID_THEMES)) {
@@ -138,40 +177,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // 헤더 이미지 저장: 관리자만 가능 (전역 공유 설정)
-    if ($header_image_raw !== '') {
+    if ($has_header_image_input) {
         if (!$is_admin) {
             echo json_encode(array('success'=>false,'error'=>'admin required')); exit;
         }
 
         $header_image_json = null;
-        if ($header_image_raw !== 'null') {
-            $parsed = json_decode($header_image_raw, true);
-            if (is_array($parsed) && isset($parsed['src'])) {
-                $src = $parsed['src'];
-                // Validate src: must be URL/data URI/or local uploaded file URL
-                $is_valid_url = false;
-                if (filter_var($src, FILTER_VALIDATE_URL) !== false) {
-                    $parts = parse_url($src);
-                    if (is_array($parts) && isset($parts['scheme']) && in_array(strtolower($parts['scheme']), array('http', 'https'))) {
-                        $is_valid_url = true;
-                    }
+        $payload = cal_parse_header_image_payload($header_image_input);
+        if (!$payload['ok']) {
+            echo json_encode(array('success'=>false,'error'=>'invalid header_image data')); exit;
+        }
+        $parsed = $payload['data'];
+        if (is_array($parsed) && isset($parsed['src'])) {
+            $src = $parsed['src'];
+            // Validate src: must be URL/data URI/or local uploaded file URL
+            $is_valid_url = false;
+            if (filter_var($src, FILTER_VALIDATE_URL) !== false) {
+                $parts = parse_url($src);
+                if (is_array($parts) && isset($parts['scheme']) && in_array(strtolower($parts['scheme']), array('http', 'https'))) {
+                    $is_valid_url = true;
                 }
-                $is_data_uri  = preg_match('/^data:image\//i', $src);
-                $is_local_file = cal_is_local_header_src($src, $HEADER_UPLOAD_REL_DIR);
-                if ($is_valid_url || $is_data_uri || $is_local_file) {
-                    $safe = array(
-                        'src' => $src,
-                        'type' => isset($parsed['type']) && in_array($parsed['type'], array('url','file')) ? $parsed['type'] : 'url',
-                        'height' => isset($parsed['height']) ? max(60, min(400, intval($parsed['height']))) : 160,
-                        'fit' => isset($parsed['fit']) && in_array($parsed['fit'], array('cover','contain','fill')) ? $parsed['fit'] : 'cover'
-                    );
-                    $header_image_json = json_encode($safe);
-                } else {
-                    echo json_encode(array('success'=>false,'error'=>'invalid image src')); exit;
-                }
-            } else {
-                echo json_encode(array('success'=>false,'error'=>'invalid header_image data')); exit;
             }
+            $is_data_uri  = preg_match('/^data:image\//i', $src);
+            $is_local_file = cal_is_local_header_src($src, $HEADER_UPLOAD_REL_DIR);
+            if ($is_valid_url || $is_data_uri || $is_local_file) {
+                $safe = array(
+                    'src' => $src,
+                    'type' => isset($parsed['type']) && in_array($parsed['type'], array('url','file')) ? $parsed['type'] : 'url',
+                    'height' => isset($parsed['height']) ? max(60, min(400, intval($parsed['height']))) : 160,
+                    'fit' => isset($parsed['fit']) && in_array($parsed['fit'], array('cover','contain','fill')) ? $parsed['fit'] : 'cover'
+                );
+                $header_image_json = json_encode($safe);
+            } else {
+                echo json_encode(array('success'=>false,'error'=>'invalid image src')); exit;
+            }
+        } elseif (is_array($parsed)) {
+            echo json_encode(array('success'=>false,'error'=>'invalid header_image data')); exit;
+        } elseif ($parsed !== null) {
+            echo json_encode(array('success'=>false,'error'=>'invalid header_image data')); exit;
         }
 
         // 전역 설정 UPSERT (__global__ 레코드)
