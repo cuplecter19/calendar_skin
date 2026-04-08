@@ -77,6 +77,8 @@ function cal_extract_local_header_filename($src, $upload_data_dir) {
 
     $path = isset($parts['path']) ? $parts['path'] : '';
     if ($path === '') return false;
+    $path = str_replace('\\', '/', $path);
+    $path = rawurldecode($path);
     if (substr($path, 0, 1) !== '/') $path = '/'.$path;
     $path = preg_replace('#/+#', '/', $path);
 
@@ -95,6 +97,12 @@ function cal_extract_local_header_filename($src, $upload_data_dir) {
             }
             return false;
         }
+    }
+
+    // 경로 형태가 달라도 동일 사이트 내 calendar_header 파일이면 허용
+    $upload_dir_name = trim($upload_data_dir, '/');
+    if ($upload_dir_name !== '' && preg_match('#/'.preg_quote($upload_dir_name, '#').'/([A-Za-z0-9._-]+)$#i', $path, $m)) {
+        return $m[1];
     }
     return false;
 }
@@ -508,10 +516,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($old_src && $old_src !== $new_src) {
-            cal_remove_local_header_file($old_src, $HEADER_UPLOAD_DATA_DIR);
-        }
-
         $himg_val = $header_image_json ? "'".sql_real_escape_string($header_image_json)."'" : "NULL";
         if ($global_existing && $global_existing['mb_id']) {
             sql_query("UPDATE {$pref_table} SET header_image={$himg_val}, updated_at=NOW() WHERE mb_id='__global__'");
@@ -521,6 +525,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     theme='sakura',
                     header_image={$himg_val},
                     updated_at=NOW()");
+        }
+
+        if ($old_src && $old_src !== $new_src) {
+            cal_remove_local_header_file($old_src, $HEADER_UPLOAD_DATA_DIR);
         }
 
         echo json_encode(array('success'=>true));
