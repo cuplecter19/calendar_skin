@@ -31,7 +31,7 @@ function cal_is_local_header_src($src, $upload_rel_dir) {
     } else {
         $path = $src;
     }
-    if ($path !== '' && $path[0] !== '/') $path = '/'.$path;
+    if ($path !== '' && substr($path, 0, 1) !== '/') $path = '/'.$path;
 
     if ($path && cal_starts_with($path, $normalized_upload_rel_dir)) return true;
 

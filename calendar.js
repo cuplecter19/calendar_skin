@@ -4,6 +4,7 @@ var CalendarBoard = (function() {
   var recentColors = [];
   var COLOR_STORAGE_KEY = 'cal_recent_colors';
   var THEME_STORAGE_KEY = 'cal_theme';
+  var HEADER_UPLOAD_PATH_PATTERN = /\/calendar_header\//i;
   var MAX_RECENT_COLORS = 12;
   var formsBound = false;
   var currentSelectedDay = null;
@@ -154,7 +155,7 @@ var CalendarBoard = (function() {
     if (!src || imgEl.style.display === 'none') return null;
     var height = parseInt(imgEl.style.height) || 160;
     var fit = imgEl.style.objectFit || 'cover';
-    var type = (/^data:image\//i.test(src) || /\/calendar_header\//i.test(src)) ? 'file' : 'url';
+    var type = (/^data:image\//i.test(src) || HEADER_UPLOAD_PATH_PATTERN.test(src)) ? 'file' : 'url';
     return { src: src, type: type, height: height, fit: fit };
   }
 
