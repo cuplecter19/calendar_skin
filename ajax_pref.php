@@ -22,8 +22,9 @@ function cal_starts_with($text, $prefix) {
 
 function cal_is_local_header_src($src, $upload_rel_dir) {
     if (!is_string($src) || $src === '') return false;
+    $data_rel_dir = preg_replace('#^/data/#', '/', $upload_rel_dir);
     $prefixes = array(
-        rtrim(G5_DATA_URL, '/').'/calendar_header/',
+        rtrim(G5_DATA_URL, '/').rtrim($data_rel_dir, '/').'/',
         rtrim(G5_URL, '/').$upload_rel_dir,
         $upload_rel_dir
     );
@@ -41,7 +42,7 @@ function cal_remove_local_header_file($src, $upload_rel_dir) {
     $relative = $src;
     if (cal_starts_with($src, $base_data_url.'/')) {
         $relative = '/'.ltrim(substr($src, strlen($base_data_url)), '/');
-    } else if (cal_starts_with($src, $base_site_url.'/')) {
+    } elseif (cal_starts_with($src, $base_site_url.'/')) {
         $relative = '/'.ltrim(substr($src, strlen($base_site_url)), '/');
     }
 

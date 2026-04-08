@@ -7,6 +7,8 @@ header('Content-Type: application/json; charset=utf-8');
 @ini_set('display_errors', '0');
 error_reporting(0);
 
+$HEADER_UPLOAD_DATA_DIR = 'calendar_header';
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     echo json_encode(array('success' => false, 'error' => 'invalid method'));
     exit;
@@ -65,7 +67,7 @@ if (!isset($allowed[$mime])) {
     exit;
 }
 
-$upload_dir = rtrim(G5_DATA_PATH, '/').'/calendar_header';
+$upload_dir = rtrim(G5_DATA_PATH, '/').'/'.$HEADER_UPLOAD_DATA_DIR;
 if (!is_dir($upload_dir)) {
     @mkdir($upload_dir, 0755, true);
 }
@@ -94,7 +96,7 @@ if (!move_uploaded_file($file['tmp_name'], $save_path)) {
     exit;
 }
 
-$file_url = rtrim(G5_DATA_URL, '/').'/calendar_header/'.$filename;
+$file_url = rtrim(G5_DATA_URL, '/').'/'.$HEADER_UPLOAD_DATA_DIR.'/'.$filename;
 echo json_encode(array(
     'success' => true,
     'src' => $file_url,
