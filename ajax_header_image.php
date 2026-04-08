@@ -60,7 +60,7 @@ function cal_header_delete_local_file($src, $data_url, $data_dir) {
     if (strpos($src, $prefix) !== 0) return;
     $rel = substr($src, strlen($prefix));
     $basename = basename($rel);
-    if (!$basename || preg_match('/[^a-zA-Z0-9_\.\-]/', $basename)) return;
+    if (!$basename || strpos($basename, '..') !== false || preg_match('/[^a-zA-Z0-9_.-]/', $basename)) return;
     $target = rtrim($data_dir, '/').'/'.$basename;
     if (is_file($target)) @unlink($target);
 }
@@ -120,6 +120,7 @@ if ($type === 'url') {
         IMAGETYPE_PNG  => 'png',
         IMAGETYPE_GIF  => 'gif'
     );
+    // PHP 5.6 환경에서는 IMAGETYPE_WEBP 상수가 없을 수 있어 존재할 때만 허용합니다.
     if (defined('IMAGETYPE_WEBP')) $allowed_types[IMAGETYPE_WEBP] = 'webp';
     if (!isset($allowed_types[$img_info[2]])) {
         echo json_encode(array('success'=>false,'error'=>'unsupported image type')); exit;

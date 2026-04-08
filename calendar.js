@@ -127,8 +127,8 @@ var CalendarBoard = (function() {
           var preview = q('cal-img-url-preview');
           if (!preview) return;
           var v = urlInput.value.trim();
-          if (v && /^https?:\/\/.+/i.test(v)) {
-            preview.innerHTML = '<img src="' + esc(v) + '" onerror="this.style.display=\'none\'" style="max-width:100%;max-height:180px;border-radius:8px;">';
+          if (v && isSafeImageUrl(v)) {
+            preview.textContent = '적용 버튼을 누르면 헤더에 반영됩니다.';
           } else {
             preview.innerHTML = '';
           }
@@ -160,7 +160,7 @@ var CalendarBoard = (function() {
     reader.onload = function(e){
       pendingFileData = e.target.result;
       var preview = q('cal-img-file-preview');
-      if (preview) preview.innerHTML = '<img src="' + pendingFileData + '" style="max-width:100%;max-height:180px;border-radius:8px;">';
+      if (preview) preview.textContent = '이미지 파일이 선택되었습니다.';
     };
     reader.readAsDataURL(file);
   }
@@ -473,7 +473,7 @@ var CalendarBoard = (function() {
       return;
     }
 
-    if (type === 'url' && !/^https?:\/\/.+/i.test(src)) {
+    if (type === 'url' && !isSafeImageUrl(src)) {
       alert('올바른 이미지 URL을 입력하세요.');
       return;
     }
@@ -527,6 +527,11 @@ var CalendarBoard = (function() {
         alert('헤더 이미지 삭제 실패: ' + (r && r.error ? r.error : '알 수 없는 오류'));
       }
     });
+  }
+
+  function isSafeImageUrl(url){
+    if (!url || typeof url !== 'string') return false;
+    return /^https?:\/\/[^\s"'<>]+$/i.test(url);
   }
 
   /* ══════════════════════════
