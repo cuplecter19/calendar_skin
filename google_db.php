@@ -50,4 +50,7 @@ function gcal_ensure_tables() {
     if ($header_image_col !== false && sql_num_rows($header_image_col) == 0) {
         sql_query("ALTER TABLE {$pref_table} ADD COLUMN header_image longtext AFTER theme", false);
     }
+    if ($header_image_col && function_exists('sql_free_result')) {
+        sql_free_result($header_image_col);
+    }
 }

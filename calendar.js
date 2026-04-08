@@ -60,7 +60,7 @@ var CalendarBoard = (function() {
     var val = data ? JSON.stringify(data) : 'null';
     xhr.onreadystatechange = function(){
       if (xhr.readyState !== 4) return;
-      if (xhr.status !== 200) { if (callback) callback(false, '서버 저장에 실패했습니다.'); return; }
+      if (xhr.status !== 200) { if (callback) callback(false, '서버 저장에 실패했습니다. (HTTP ' + xhr.status + ')'); return; }
       try {
         var resp = JSON.parse(xhr.responseText);
         if (resp && resp.success) { if (callback) callback(true); return; }
@@ -155,6 +155,7 @@ var CalendarBoard = (function() {
     if (!src || imgEl.style.display === 'none') return null;
     var height = parseInt(imgEl.style.height) || 160;
     var fit = imgEl.style.objectFit || 'cover';
+    // data URI 또는 업로드 디렉터리 URL은 파일 업로드 기반 이미지로 취급한다.
     var type = (/^data:image\//i.test(src) || HEADER_UPLOAD_PATH_PATTERN.test(src)) ? 'file' : 'url';
     return { src: src, type: type, height: height, fit: fit };
   }
