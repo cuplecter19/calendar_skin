@@ -3,6 +3,20 @@ if (!defined("_GNUBOARD_")) exit;
 
 $_skin_url = str_replace('http://', 'https://', $board_skin_url);
 
+// 전역 헤더 이미지 DB에서 로드 (비로그인 방문자도 동일하게 표시)
+include_once(__DIR__.'/google_db.php');
+gcal_ensure_tables();
+$_pref_table = $g5['prefix'].'calendar_user_pref';
+$_global_pref = sql_fetch("SELECT header_image FROM {$_pref_table} WHERE mb_id='__global__'");
+$_global_header_image = null;
+if ($_global_pref && $_global_pref['header_image']) {
+    $_global_header_image = json_decode($_global_pref['header_image'], true);
+    // 유효하지 않은 데이터 무시
+    if (!is_array($_global_header_image) || empty($_global_header_image['src'])) {
+        $_global_header_image = null;
+    }
+}
+
 $cal_year  = isset($_GET['cal_year']) ? intval($_GET['cal_year']) : intval(date('Y'));
 $cal_month = isset($_GET['cal_month']) ? intval($_GET['cal_month']) : intval(date('n'));
 $is_ajax   = isset($_GET['ajax']) && $_GET['ajax'] == '1';
@@ -115,26 +129,41 @@ ob_start();
       <span class="cal-theme-dot" data-theme="sakura" title="벚꽃"></span>
       <span class="cal-theme-dot" data-theme="ocean" title="바다"></span>
       <span class="cal-theme-dot" data-theme="melon" title="메론소다"></span>
-      <span class="cal-theme-dot" data-theme="kuromi" title="��로미"></span>
+      <span class="cal-theme-dot" data-theme="kuromi" title="구로미"></span>
       <span class="cal-theme-dot" data-theme="mocha" title="다크 모카"></span>
       <span class="cal-theme-dot" data-theme="lemon" title="레모네이드"></span>
     </div>
     <div class="cal-titlebar-label">Calendar</div>
     <div class="cal-titlebar-actions">
+      <?php if ($is_admin): ?>
       <button type="button" class="cal-titlebar-btn" id="btn-header-img" title="헤더 이미지 설정"><i class="fa-solid fa-camera"></i></button>
+      <?php endif; ?>
     </div>
   </div>
 
   <!-- ═══ 헤더 이미지 영역 ═══ -->
-  <div class="cal-header-image" id="cal-header-image">
-    <div class="cal-header-image-placeholder" id="cal-header-placeholder">
+  <div class="cal-header-image<?php if ($_global_header_image) echo ' has-image'; ?>" id="cal-header-image">
+    <?php if (!$_global_header_image): ?>
+    <div class="cal-header-image-placeholder" id="cal-header-placeholder"<?php if (!$is_admin) echo ' style="display:none;"'; ?>>
       <span>📷 이미지를 등록하세요</span>
     </div>
-    <img id="cal-header-img-el" class="cal-header-img" src="" alt="" style="display:none;">
-    <button type="button" class="cal-header-img-remove" id="btn-header-img-remove" style="display:none;" title="이미지 제거">×</button>
+    <?php endif; ?>
+    <?php
+    $_himg_src    = $_global_header_image ? htmlspecialchars($_global_header_image['src'], ENT_QUOTES, 'UTF-8') : '';
+    $_himg_height = $_global_header_image ? intval($_global_header_image['height'] ?? 160) : 160;
+    $_himg_fit    = $_global_header_image ? htmlspecialchars($_global_header_image['fit'] ?? 'cover', ENT_QUOTES, 'UTF-8') : 'cover';
+    $_himg_style  = $_global_header_image
+        ? 'height:'.$_himg_height.'px;object-fit:'.$_himg_fit.';'
+        : 'display:none;';
+    ?>
+    <img id="cal-header-img-el" class="cal-header-img" src="<?php echo $_himg_src; ?>" alt="" style="<?php echo $_himg_style; ?>">
+    <?php if ($is_admin): ?>
+    <button type="button" class="cal-header-img-remove" id="btn-header-img-remove" <?php if (!$_global_header_image) echo 'style="display:none;"'; ?> title="이미지 제거">×</button>
+    <?php endif; ?>
   </div>
 
-  <!-- ═══ 헤더 이미지 설정 모달 ═══ -->
+  <!-- ═══ 헤더 이미지 설정 모달 (관리자 전용) ═══ -->
+  <?php if ($is_admin): ?>
   <div id="cal-img-modal" class="cal-modal">
     <div id="cal-img-backdrop" class="cal-modal-backdrop"></div>
     <div class="cal-modal-content" style="max-width:420px;">
@@ -175,6 +204,7 @@ ob_start();
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- ═══ 캘린더 본체 ═══ -->
   <div class="cal-body">

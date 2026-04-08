@@ -4,7 +4,6 @@ var CalendarBoard = (function() {
   var recentColors = [];
   var COLOR_STORAGE_KEY = 'cal_recent_colors';
   var THEME_STORAGE_KEY = 'cal_theme';
-  var HIMG_STORAGE_KEY  = 'cal_header_image';
   var MAX_RECENT_COLORS = 12;
   var formsBound = false;
   var currentSelectedDay = null;
@@ -29,13 +28,9 @@ var CalendarBoard = (function() {
             var resp = JSON.parse(xhr.responseText);
             if (resp.success) {
               _serverPrefsLoaded = true;
+              // 테마만 localStorage에 저장 (헤더 이미지는 서버에서 렌더링됨)
               if (resp.theme && VALID_THEMES.indexOf(resp.theme) > -1) {
                 try { localStorage.setItem(THEME_STORAGE_KEY, resp.theme); } catch(e){}
-              }
-              if (resp.header_image && resp.header_image.src) {
-                try { localStorage.setItem(HIMG_STORAGE_KEY, JSON.stringify(resp.header_image)); } catch(e){}
-              } else if (resp.header_image === null) {
-                try { localStorage.removeItem(HIMG_STORAGE_KEY); } catch(e){}
               }
             }
           } catch(e){}
@@ -72,7 +67,7 @@ var CalendarBoard = (function() {
     loadRecentColors();
     loadServerPrefs(function(){
       applyStoredTheme();
-      applyStoredHeaderImage();
+      // 헤더 이미지는 서버에서 이미 렌더링됨 – 별도 적용 불필요
     });
     bindGlobalClickDelegation();
     bindDayClicks();
@@ -111,22 +106,23 @@ var CalendarBoard = (function() {
      헤더 이미지 관리
      ══════════════════════════ */
   function getHeaderImageData(){
-    try {
-      var raw = localStorage.getItem(HIMG_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch(e){ return null; }
+    // 서버에서 렌더링된 DOM에서 현재 이미지 정보를 읽음
+    var imgEl = q('cal-header-img-el');
+    if (!imgEl) return null;
+    var src = imgEl.getAttribute('src') || '';
+    if (!src || imgEl.style.display === 'none') return null;
+    var height = parseInt(imgEl.style.height) || 160;
+    var fit = imgEl.style.objectFit || 'cover';
+    var type = /^data:image\//i.test(src) ? 'file' : 'url';
+    return { src: src, type: type, height: height, fit: fit };
   }
 
-  function saveHeaderImageData(data, skipServer){
-    try {
-      if (data) localStorage.setItem(HIMG_STORAGE_KEY, JSON.stringify(data));
-      else localStorage.removeItem(HIMG_STORAGE_KEY);
-    } catch(e){}
-    if (!skipServer) saveHeaderImageToServer(data);
+  function saveHeaderImageData(data){
+    applyHeaderImage(data);
+    saveHeaderImageToServer(data);
   }
 
-  function applyStoredHeaderImage(){
-    var data = getHeaderImageData();
+  function applyHeaderImage(data){
     var container = q('cal-header-image');
     var imgEl = q('cal-header-img-el');
     var placeholder = q('cal-header-placeholder');
@@ -139,11 +135,13 @@ var CalendarBoard = (function() {
       imgEl.style.height = (data.height || 160) + 'px';
       imgEl.style.objectFit = data.fit || 'cover';
       if (removeBtn) removeBtn.style.display = '';
+      if (placeholder) placeholder.style.display = 'none';
       container.classList.add('has-image');
     } else {
       imgEl.src = '';
       imgEl.style.display = 'none';
       if (removeBtn) removeBtn.style.display = 'none';
+      if (placeholder) placeholder.style.display = '';
       container.classList.remove('has-image');
     }
   }
@@ -324,7 +322,6 @@ var CalendarBoard = (function() {
     if (closest(t, '#btn-header-img-remove')) {
       e.preventDefault(); e.stopPropagation();
       saveHeaderImageData(null);
-      applyStoredHeaderImage();
       return;
     }
 
@@ -511,13 +508,11 @@ var CalendarBoard = (function() {
 
     if (!src) {
       saveHeaderImageData(null);
-      applyStoredHeaderImage();
       closeImageModal();
       return;
     }
 
     saveHeaderImageData({ src: src, type: type, height: height, fit: fit });
-    applyStoredHeaderImage();
     closeImageModal();
   }
 
@@ -846,7 +841,6 @@ var CalendarBoard = (function() {
         if (!app) return;
         app.innerHTML = xhr.responseText;
         applyStoredTheme();
-        applyStoredHeaderImage();
         bindDayClicks();
         bindMonthNav();
         bindGoogleAuthTopNavigation();
@@ -882,7 +876,7 @@ var CalendarBoard = (function() {
         xhr.onreadystatechange = function(){
           if (xhr.readyState===4 && xhr.status===200){
             var app = q('calendar-app');
-            if (app) { app.innerHTML = xhr.responseText; applyStoredTheme(); applyStoredHeaderImage(); bindDayClicks(); bindMonthNav(); bindGoogleAuthTopNavigation(); bindGoogleRefresh(); bindImageModal(); }
+            if (app) { app.innerHTML = xhr.responseText; applyStoredTheme(); bindDayClicks(); bindMonthNav(); bindGoogleAuthTopNavigation(); bindGoogleRefresh(); bindImageModal(); }
             if (history.pushState) history.pushState({}, '', u);
           }
         };
