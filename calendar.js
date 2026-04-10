@@ -148,16 +148,16 @@ var CalendarBoard = (function() {
      헤더 이미지 관리
      ══════════════════════════ */
   function getHeaderImageData(){
-    // 서버에서 렌더링된 DOM에서 현재 이미지 정보를 읽음
     var imgEl = q('cal-header-img-el');
     if (!imgEl) return null;
     var src = imgEl.getAttribute('src') || '';
     if (!src || imgEl.style.display === 'none') return null;
+    var sizeMode = imgEl.classList.contains('size-mode-width') ? 'width' : 'height';
     var height = parseInt(imgEl.style.height) || 160;
+    var width = parseInt(imgEl.style.width) || 520;
     var fit = imgEl.style.objectFit || 'cover';
-    // data URI 또는 업로드 디렉터리 URL은 파일 업로드 기반 이미지로 취급한다.
     var type = (/^data:image\//i.test(src) || HEADER_UPLOAD_PATH_PATTERN.test(src)) ? 'file' : 'url';
-    return { src: src, type: type, height: height, fit: fit };
+    return { src: src, type: type, size_mode: sizeMode, height: height, width: width, fit: fit };
   }
 
   function saveHeaderImageData(data){
@@ -180,7 +180,17 @@ var CalendarBoard = (function() {
     if (data && data.src) {
       imgEl.src = data.src;
       imgEl.style.display = 'block';
-      imgEl.style.height = (data.height || 160) + 'px';
+      imgEl.className = 'cal-header-img';
+
+      var sizeMode = data.size_mode || 'height';
+      if (sizeMode === 'width') {
+        imgEl.classList.add('size-mode-width');
+        imgEl.style.width = (data.width || 520) + 'px';
+        imgEl.style.height = 'auto';
+      } else {
+        imgEl.style.height = (data.height || 160) + 'px';
+        imgEl.style.width = '';
+      }
       imgEl.style.objectFit = data.fit || 'cover';
       if (removeBtn) removeBtn.style.display = '';
       if (placeholder) placeholder.style.display = 'none';
@@ -188,11 +198,36 @@ var CalendarBoard = (function() {
     } else {
       imgEl.src = '';
       imgEl.style.display = 'none';
+      imgEl.style.width = '';
+      imgEl.style.height = '';
+      imgEl.className = 'cal-header-img';
       if (removeBtn) removeBtn.style.display = 'none';
-      if (placeholder) placeholder.style.display = '';
+      // 플레이스홀더 복원: 없으면 새로 생성
+      if (placeholder) {
+        placeholder.style.display = '';
+      } else {
+        var newPh = document.createElement('div');
+        newPh.className = 'cal-header-image-placeholder';
+        newPh.id = 'cal-header-placeholder';
+        newPh.innerHTML = '<span>📷 이미지를 등록하세요</span>';
+        container.insertBefore(newPh, imgEl);
+      }
       container.classList.remove('has-image');
     }
   }
+
+  function updateSizeModeLabel(){
+    var sizeModeSelect = q('cal-img-size-mode');
+    var sizeLabel = q('cal-img-size-label');
+    if (!sizeModeSelect || !sizeLabel) return;
+    if (sizeModeSelect.value === 'width') {
+      sizeLabel.childNodes[0].textContent = '가로 크기 (px)';
+    } else {
+      sizeLabel.childNodes[0].textContent = '세로 크기 (px)';
+    }
+  }
+
+  var _imageModalBound = false;
 
   function bindImageModal(){
     var tabs = document.querySelectorAll('.cal-img-tab');
@@ -227,18 +262,68 @@ var CalendarBoard = (function() {
       });
     }
 
-    var dropZone = q('cal-file-drop');
-    var fileInput = q('cal-img-file-input');
-    if (dropZone && fileInput) {
-      dropZone.addEventListener('click', function(){ fileInput.click(); });
-      dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.classList.add('dragover'); });
-      dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('dragover'); });
-      dropZone.addEventListener('drop', function(e){
-        e.preventDefault(); dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
+    // 드롭존/파일인풋은 한 번만 바인딩
+    if (!_imageModalBound) {
+      _imageModalBound = true;
+
+      // 사이즈 모드 전환 이벤트 (한 번만)
+      document.addEventListener('change', function(e){
+        if (e.target && e.target.id === 'cal-img-size-mode') {
+          updateSizeModeLabel();
+        }
       });
-      fileInput.addEventListener('change', function(){
-        if (fileInput.files && fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+
+      // 드롭존·파일인풋 이벤트를 이벤트 위임으로 처리
+      document.addEventListener('click', function(e){
+        var target = e.target;
+        if (!target) return;
+
+        // 파일 input 자체 클릭은 무시 (브라우저가 알아서 탐색기 열음)
+        var fileInput = q('cal-img-file-input');
+        if (fileInput && target === fileInput) {
+          e.stopPropagation();
+          return;
+        }
+
+        // 드롭존 클릭 → 파일 input 열기
+        var dropZone = q('cal-file-drop');
+        if (dropZone && (target === dropZone || dropZone.contains(target))) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (fileInput) fileInput.click();
+          return;
+        }
+      }, true);  // 캡처링 단계에서 가장 먼저 처리
+
+      document.addEventListener('dragover', function(e){
+        var dropZone = q('cal-file-drop');
+        if (dropZone && (e.target === dropZone || dropZone.contains(e.target))) {
+          e.preventDefault();
+          dropZone.classList.add('dragover');
+        }
+      });
+
+      document.addEventListener('dragleave', function(e){
+        var dropZone = q('cal-file-drop');
+        if (dropZone && (e.target === dropZone || dropZone.contains(e.target))) {
+          dropZone.classList.remove('dragover');
+        }
+      });
+
+      document.addEventListener('drop', function(e){
+        var dropZone = q('cal-file-drop');
+        if (dropZone && (e.target === dropZone || dropZone.contains(e.target))) {
+          e.preventDefault();
+          dropZone.classList.remove('dragover');
+          if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFileSelect(e.dataTransfer.files[0]);
+        }
+      });
+
+      document.addEventListener('change', function(e){
+        if (e.target && e.target.id === 'cal-img-file-input') {
+          var fileInput = q('cal-img-file-input');
+          if (fileInput && fileInput.files && fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+        }
       });
     }
   }
@@ -506,10 +591,22 @@ var CalendarBoard = (function() {
     pendingFile = null;
     var data = getHeaderImageData();
     var urlInput = q('cal-img-url-input');
-    var heightInput = q('cal-img-height-input');
+    var sizeModeSelect = q('cal-img-size-mode');
+    var sizeInput = q('cal-img-size-input');
     var fitSelect = q('cal-img-fit-select');
     if (urlInput) urlInput.value = (data && data.type === 'url' && data.src) ? data.src : '';
-    if (heightInput) heightInput.value = (data && data.height) ? data.height : 160;
+
+    var currentMode = (data && data.size_mode) ? data.size_mode : 'height';
+    if (sizeModeSelect) sizeModeSelect.value = currentMode;
+    if (sizeInput) {
+      if (currentMode === 'width') {
+        sizeInput.value = (data && data.width) ? data.width : 520;
+      } else {
+        sizeInput.value = (data && data.height) ? data.height : 160;
+      }
+    }
+    updateSizeModeLabel();
+
     if (fitSelect) fitSelect.value = (data && data.fit) ? data.fit : 'cover';
     var urlPreview = q('cal-img-url-preview');
     var filePreview = q('cal-img-file-preview');
@@ -533,11 +630,16 @@ var CalendarBoard = (function() {
   }
 
   function handleImageSave(){
-    var heightInput = q('cal-img-height-input');
+    var sizeModeSelect = q('cal-img-size-mode');
+    var sizeInput = q('cal-img-size-input');
     var fitSelect = q('cal-img-fit-select');
-    var height = heightInput ? parseInt(heightInput.value, 10) || 160 : 160;
-    if (height < 60) height = 60;
-    if (height > 400) height = 400;
+
+    var sizeMode = sizeModeSelect ? sizeModeSelect.value : 'height';
+    var sizeVal = sizeInput ? parseInt(sizeInput.value, 10) || 160 : 160;
+    if (sizeVal < 60) sizeVal = 60;
+
+    var height = sizeMode === 'height' ? sizeVal : 160;
+    var width = sizeMode === 'width' ? sizeVal : 520;
     var fit = fitSelect ? fitSelect.value : 'cover';
 
     var activeTab = document.querySelector('.cal-img-tab.active');
@@ -549,7 +651,7 @@ var CalendarBoard = (function() {
       if (!pendingFile) { alert('업로드할 파일을 먼저 선택해 주세요.'); return; }
       uploadHeaderImageFile(pendingFile, function(uploadedSrc){
         if (!uploadedSrc) return;
-        saveHeaderImageData({ src: uploadedSrc, type: 'file', height: height, fit: fit });
+        saveHeaderImageData({ src: uploadedSrc, type: 'file', size_mode: sizeMode, height: height, width: width, fit: fit });
         closeImageModal();
       });
       return;
@@ -565,7 +667,7 @@ var CalendarBoard = (function() {
       return;
     }
 
-    saveHeaderImageData({ src: src, type: type, height: height, fit: fit });
+    saveHeaderImageData({ src: src, type: type, size_mode: sizeMode, height: height, width: width, fit: fit });
     closeImageModal();
   }
 
