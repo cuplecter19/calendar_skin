@@ -5,6 +5,12 @@ $event_date  = isset($write['wr_1']) && $write['wr_1'] ? $write['wr_1'] : date('
 $event_end   = isset($write['wr_2']) && $write['wr_2'] ? $write['wr_2'] : date('Y-m-d');
 $event_color = isset($write['wr_3']) && $write['wr_3'] ? $write['wr_3'] : '#3B82F6';
 $event_wr9   = isset($write['wr_9']) ? $write['wr_9'] : '';
+$event_wr4   = isset($write['wr_4']) ? $write['wr_4'] : '';
+$event_wr5   = isset($write['wr_5']) ? $write['wr_5'] : '';
+// 수정 모드에서 기존 구글 연동 이벤트라면 local_modified로 표시
+if ($w === 'u' && $event_wr4 !== '' && in_array($event_wr5, array('google', 'both'))) {
+    $event_wr5 = 'local_modified';
+}
 $_is_goal   = (strpos($event_wr9, 'GOAL=1') !== false);
 $_is_dday   = (strpos($event_wr9, 'DDAY=1') !== false);
 $_is_widget = (strpos($event_wr9, 'WIDGET=1') !== false);
@@ -14,6 +20,8 @@ $_is_widget = (strpos($event_wr9, 'WIDGET=1') !== false);
 <input type="hidden" name="w" value="<?php echo $w; ?>">
 <input type="hidden" name="bo_table" value="<?php echo $bo_table; ?>">
 <input type="hidden" name="wr_id" value="<?php echo $wr_id; ?>">
+<input type="hidden" name="wr_4" value="<?php echo htmlspecialchars($event_wr4); ?>">
+<input type="hidden" name="wr_5" value="<?php echo htmlspecialchars($event_wr5); ?>">
 <input type="hidden" name="wr_9" id="fwrite_wr_9" value="<?php echo htmlspecialchars($event_wr9); ?>">
 <input type="text" name="wr_subject" value="<?php echo htmlspecialchars($write['wr_subject']); ?>" required>
 <textarea name="wr_content"><?php echo htmlspecialchars($write['wr_content']); ?></textarea>
